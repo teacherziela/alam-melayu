@@ -41,6 +41,58 @@ function submitPBD(topic,correct,total,catatan){
  .catch(()=>{syncNote.textContent='⚠️ Sambungan gagal. Maklumat disimpan pada peranti.'});
 }
 let hp=100,sp=30,audioCtx=null,musicTimer=null;function tone(freq=330,duration=.16,type='sine'){try{const ctx=audioCtx||(audioCtx=new (window.AudioContext||window.webkitAudioContext)());ctx.resume();const o=ctx.createOscillator(),v=ctx.createGain();o.type=type;o.frequency.value=freq;v.gain.setValueAtTime(.045,ctx.currentTime);v.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+duration);o.connect(v);v.connect(ctx.destination);o.start();o.stop(ctx.currentTime+duration)}catch(e){}}document.getElementById('music').onclick=()=>{if(musicTimer){clearInterval(musicTimer);musicTimer=null;document.getElementById('music').textContent='♫ Muzik: OFF'}else{let i=0;const notes=[293.66,349.23,392,440,392,349.23,293.66,261.63];tone(notes[0],.5);musicTimer=setInterval(()=>tone(notes[(++i)%notes.length],.45),560);document.getElementById('music').textContent='♫ Muzik: ON'}};function stats(){document.getElementById('hp').textContent=hp;document.getElementById('sp').textContent=sp}function nearby(){let idx=-1,d=6;for(let i=0;i<npcData.length;i++){let t=Math.hypot(npcData[i].x-player.position.x,npcData[i].z-player.position.z);if(t<d){d=t;idx=i}}return idx}document.getElementById('dodge').onclick=()=>{sp=Math.min(30,sp+3);stats();tone(220,.12);speech.textContent='🛡️ Mengelak! +3 tenaga.';answer.innerHTML='';dialog.style.display='block'};document.getElementById('attack').onclick=()=>{const i=nearby();if(i<0){speech.textContent='Dekati NPC untuk memulakan cabaran pedang Sejarah.';answer.innerHTML='';dialog.style.display='block';return}if(sp<5){speech.textContent='Tenaga tidak cukup. Tekan Elak untuk pulihkan SP.';answer.innerHTML='';dialog.style.display='block';return}sp-=5;stats();tone(520,.14,'sawtooth');talk();speech.insertAdjacentHTML('afterbegin','<b>⚔️ Pertarungan Ilmu!</b><br>Jawab dengan betul untuk menyerang.<br>')};let active=null, yaw=0,drag=false,lastX=0;const quest=document.getElementById('quest'),dialog=document.getElementById('dialog'),speech=document.getElementById('speech'),answer=document.getElementById('answer');function hud(){quest.innerHTML=`Misi selesai: ${done.size}/4 · XP: ${done.size*100}<br>${npcData.map((n,i)=>(done.has(i)?'✅':'◻️')+' '+n.topic).join('<br>')}<br><small>Rekod misi versi baharu disimpan pada peranti ini.</small>`}hud();function talk(){let nearest=null,dist=5;for(let i=0;i<npcData.length;i++){const n=npcData[i],d=Math.hypot(n.x-player.position.x,n.z-player.position.z);if(d<dist){nearest=i;dist=d}}if(nearest===null){speech.textContent='Dekati watak NPC untuk menerima misi.';answer.innerHTML='';dialog.style.display='block';return}active=nearest;const n=npcData[nearest];speech.innerHTML=`<b>${n.name}</b><br>${n.topic}<p>${done.has(nearest)?'Misi telah diselesaikan!':n.q}</p>`;answer.innerHTML='';if(!done.has(nearest))n.choices.forEach((c,j)=>{const b=document.createElement('button');b.textContent=c;b.onclick=()=>{if(j===n.correct){done.add(nearest);saveStudentProgress();submitPBD(n.topic,1,1,'Misi NPC selesai; jawapan betul. Bukti PBD perlu disemak guru.');tone(660,.22);speech.innerHTML=`⚔️ Serangan berjaya! Musuh ditewaskan. +100 XP<br>${n.ex}`;answer.innerHTML='';hud()}else{attempts[nearest]=(attempts[nearest]||0)+1;saveStudentProgress();hp=Math.max(0,hp-10);stats();tone(140,.3,'sawtooth');speech.innerHTML=`💥 Musuh menyerang! -10 HP.<br>${n.ex}<p>${n.q}</p>`}};answer.append(b)});dialog.style.display='block'}document.getElementById('act').onclick=talk;document.getElementById('close').onclick=()=>dialog.style.display='none';window.addEventListener('keydown',e=>{keys.add(e.key);if(e.key.toLowerCase()==='e')talk()});window.addEventListener('keyup',e=>keys.delete(e.key));document.querySelectorAll('[data-key]').forEach(b=>{const k=b.dataset.key;b.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(k);b.setPointerCapture(e.pointerId)});for(const ev of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(ev,()=>keys.delete(k))});renderer.domElement.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX});window.addEventListener('pointerup',()=>drag=false);window.addEventListener('pointermove',e=>{if(drag){yaw+=(e.clientX-lastX)*.006;lastX=e.clientX}});
+
+/* Kehidupan kampung: NPC bekerja, berniaga, menyapu, memancing dan meronda. */
+const villagers=[];
+function villagePerson(role,x,z,color){
+ const g=character(color,x,z);g.userData.role=role;
+ const limbs=g.children.filter(o=>o.isMesh&&o.geometry?.type==='BoxGeometry');
+ const v={role,g,origin:new THREE.Vector3(x,0,z),phase:Math.random()*6.28,limbs,speed:role==='jalan'?0.9:0};
+ villagers.push(v);
+ if(role==='sapu'){const broom=new THREE.Group();g.add(broom);broom.position.set(.9,.95,.3);const stick=cylinder(.055,.055,2.3,bamboo,0,0,0,broom);stick.rotation.z=.3;const brush=box(.5,.28,.32,mat(0x96703c),-.32,-1.05,0,broom);v.tool=broom;}
+ if(role==='nelayan'){const pole=box(.055,3.3,.055,bamboo,.85,1.3,.5,g);pole.rotation.z=-.65;v.tool=pole;}
+ if(role==='tukang'){const tool=box(.14,.85,.12,mat(0x777b80),.8,1.3,.1,g);tool.rotation.z=.5;v.tool=tool;}
+ if(role==='jual'){const basket=new THREE.Group();g.add(basket);basket.position.set(.8,1.15,.5);box(.9,.4,.8,wood,0,0,0,basket);for(let k=0;k<4;k++){const fruit=new THREE.Mesh(new THREE.SphereGeometry(.17,8,6),mat(k%2?0xa9b236:0xdb8337));fruit.position.set((k%2)*.35-.17,.25,Math.floor(k/2)*.35-.17);basket.add(fruit)}v.tool=basket;}
+ return v;
+}
+villagePerson('sapu',-10,2,0xa34b62);
+villagePerson('sapu',-13,-25,0x6b8555);
+villagePerson('jual',-9,-19,0xb97734);
+villagePerson('jual',11,-36,0x7b548e);
+villagePerson('nelayan',20,-34,0x547b83);
+villagePerson('nelayan',24,-37,0x8d6943);
+villagePerson('tukang',-18,-5,0x67794b);
+villagePerson('tukang',16,13,0x8d7650);
+villagePerson('jalan',-5,-12,0xa15c73);
+villagePerson('jalan',5,-28,0x4c8a8a);
+villagePerson('jalan',-5,-44,0xb38a46);
+villagePerson('jalan',3,15,0x916c9c);
+function animateVillagers(time,dt){
+ for(const v of villagers){
+  const t=time+v.phase,g=v.g;
+  if(v.role==='jalan'){
+   const route=6;g.position.x=v.origin.x+Math.sin(t*.34)*route;
+   g.position.z=v.origin.z+Math.cos(t*.34)*2;
+   g.rotation.y=Math.atan2(Math.cos(t*.34)*route,-Math.sin(t*.34)*.7);
+   g.position.y=Math.abs(Math.sin(t*3))*.07;
+  }else if(v.role==='sapu'){
+   g.rotation.y=.4+Math.sin(t*2)*.17;
+   if(v.tool)v.tool.rotation.z=Math.sin(t*3)*.34;
+   g.position.x=v.origin.x+Math.sin(t*.38)*1.4;
+  }else if(v.role==='jual'){
+   g.rotation.y=Math.sin(t*.7)*.18;
+   if(v.tool)v.tool.rotation.z=Math.sin(t*1.6)*.14;
+  }else if(v.role==='nelayan'){
+   g.rotation.y=-.7+Math.sin(t*.5)*.13;
+   if(v.tool)v.tool.rotation.z=Math.sin(t*1.3)*.16;
+  }else if(v.role==='tukang'){
+   g.rotation.y=Math.sin(t*.4)*.12;
+   if(v.tool)v.tool.rotation.z=.4+Math.sin(t*4)*.45;
+  }
+  if(v.limbs.length>3){v.limbs[1].rotation.x=Math.sin(t*3)*(v.role==='jalan'?.38:.13);v.limbs[3].rotation.x=-v.limbs[1].rotation.x}
+ }
+}
+
 const pirates=[{x:2,z:-23,hp:60,level:1},{x:-3,z:-38,hp:85,level:2},{x:2,z:-50,hp:110,level:3}];
 pirates.forEach((p,i)=>{p.mesh=character(0x472525,p.x,p.z);p.mesh.scale.setScalar(1.07);p.mesh.rotation.y=Math.PI;const band=box(1.1,.18,.78,mat(0x9f2828),0,3.05,0,p.mesh);p.mesh.userData.pirate=i});
 const challengeBank=[
@@ -57,5 +109,5 @@ document.getElementById('run').addEventListener('pointerdown',e=>{runHeld=true;e
 const minimap=document.getElementById('minimap'),mapctx=minimap.getContext('2d');
 function mapDraw(){const c=mapctx;c.clearRect(0,0,110,110);c.fillStyle='#315d39';c.beginPath();c.arc(55,55,53,0,Math.PI*2);c.fill();c.strokeStyle='#c5a16c';c.lineWidth=7;c.beginPath();c.moveTo(55,0);c.lineTo(55,110);c.stroke();const mark=(x,z,color,r)=>{c.fillStyle=color;c.beginPath();c.arc(55+x*.65,55+z*.65,r,0,Math.PI*2);c.fill()};npcData.forEach(n=>mark(n.x,n.z,'#f8ce63',3));pirates.filter(p=>p.hp>0).forEach(p=>mark(p.x,p.z,'#f3544d',4));mark(player.position.x,player.position.z,'#fff',5)}
 
-const clock=new THREE.Clock();function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.05);let dx=0,dz=0;if(keys.has('w')||keys.has('ArrowUp'))dz-=1;if(keys.has('s')||keys.has('ArrowDown'))dz+=1;if(keys.has('a')||keys.has('ArrowLeft'))dx-=1;if(keys.has('d')||keys.has('ArrowRight'))dx+=1;if(dx||dz){const v=new THREE.Vector3(dx,0,dz).normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);player.position.addScaledVector(v,dt*(runHeld||keys.has('Shift')?11:7));player.position.x=THREE.MathUtils.clamp(player.position.x,-65,65);player.position.z=THREE.MathUtils.clamp(player.position.z,-65,65);player.rotation.y=Math.atan2(-v.x,-v.z)}pirates.forEach(p=>{if(p.hp>0){p.mesh.rotation.y=Math.atan2(player.position.x-p.mesh.position.x,player.position.z-p.mesh.position.z)}});const closePirate=pirateNear();document.getElementById('enemyTag').style.display=closePirate>=0?'block':'none';if(closePirate>=0)document.getElementById('enemyHP').textContent=pirates[closePirate].hp;mapDraw();const target=player.position.clone().add(new THREE.Vector3(Math.sin(yaw)*10,8,Math.cos(yaw)*10));camera.position.lerp(target,.085);camera.lookAt(player.position.x,2,player.position.z);renderer.render(scene,camera)}loop();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+const clock=new THREE.Clock();function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.05);let dx=0,dz=0;if(keys.has('w')||keys.has('ArrowUp'))dz-=1;if(keys.has('s')||keys.has('ArrowDown'))dz+=1;if(keys.has('a')||keys.has('ArrowLeft'))dx-=1;if(keys.has('d')||keys.has('ArrowRight'))dx+=1;if(dx||dz){const v=new THREE.Vector3(dx,0,dz).normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw);player.position.addScaledVector(v,dt*(runHeld||keys.has('Shift')?11:7));player.position.x=THREE.MathUtils.clamp(player.position.x,-65,65);player.position.z=THREE.MathUtils.clamp(player.position.z,-65,65);player.rotation.y=Math.atan2(-v.x,-v.z)}pirates.forEach(p=>{if(p.hp>0){p.mesh.rotation.y=Math.atan2(player.position.x-p.mesh.position.x,player.position.z-p.mesh.position.z)}});const closePirate=pirateNear();document.getElementById('enemyTag').style.display=closePirate>=0?'block':'none';if(closePirate>=0)document.getElementById('enemyHP').textContent=pirates[closePirate].hp;animateVillagers(clock.elapsedTime,dt);mapDraw();const target=player.position.clone().add(new THREE.Vector3(Math.sin(yaw)*10,8,Math.cos(yaw)*10));camera.position.lerp(target,.085);camera.lookAt(player.position.x,2,player.position.z);renderer.render(scene,camera)}loop();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 </script></body></html>
